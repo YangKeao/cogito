@@ -5,10 +5,10 @@ mod frame;
 mod report;
 
 
-use std::alloc::{GlobalAlloc, Layout, System};
+use std::alloc::{GlobalAlloc, Layout};
 
 
-use collector::COLLECTOR;
+
 use frame::UnresolvedFrames;
 use report::Report;
 
@@ -52,7 +52,7 @@ impl<T: GlobalAlloc> AllocRecorder<T>  {
     pub fn flush(&self) {
         let ptr = self.collector.load(Ordering::SeqCst);
         if !ptr.is_null() {
-            let collector = unsafe {Box::from_raw(ptr)};
+            let _collector = unsafe {Box::from_raw(ptr)};
         }
 
         let collector = Box::new(RwLock::new(Collector::default()));
