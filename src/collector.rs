@@ -28,7 +28,7 @@ impl Collector {
             }
         }
 
-        if let Some(_) = self.ptr_map.insert(addr, (backtrace.clone(), size)) {
+        if self.ptr_map.insert(addr, (backtrace.clone(), size)).is_some() {
             unreachable!();
         }
     }

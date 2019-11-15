@@ -37,7 +37,7 @@ fn main() {
         vec.push(rand::random());
     }
 
-    let sorted = quick_sort(vec);
+    let _sorted = quick_sort(vec);
 
     cogito::stop();
 

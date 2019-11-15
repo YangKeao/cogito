@@ -1,6 +1,6 @@
 use backtrace::Frame;
 use rustc_demangle::demangle;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::os::raw::c_void;
 use std::path::PathBuf;

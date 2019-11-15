@@ -2,14 +2,14 @@ mod collector;
 mod frame;
 mod report;
 
-use backtrace::{Backtrace, Frame};
+
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::os::raw::c_void;
+
 
 use collector::COLLECTOR;
 use frame::UnresolvedFrames;
 use report::Report;
-use std::ptr::NonNull;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 fn get_backtrace() -> UnresolvedFrames {
@@ -41,7 +41,7 @@ unsafe impl GlobalAlloc for MyAllocator {
                 Ok(mut guard) => {
                     self.record.store(false, Ordering::SeqCst);
                     guard.alloc(
-                        unsafe { std::mem::transmute(ptr) },
+                        std::mem::transmute(ptr),
                         layout.size(),
                         get_backtrace(),
                     );
@@ -63,7 +63,7 @@ unsafe impl GlobalAlloc for MyAllocator {
             match COLLECTOR.write() {
                 Ok(mut guard) => {
                     self.record.store(false, Ordering::SeqCst);
-                    guard.free(unsafe { std::mem::transmute(ptr) }, get_backtrace());
+                    guard.free(std::mem::transmute(ptr), get_backtrace());
                     self.record.store(true, Ordering::SeqCst);
                 }
                 Err(_) => {
@@ -94,7 +94,5 @@ pub fn stop() {
 }
 
 pub fn report() -> Report {
-    let report = COLLECTOR.read().unwrap().report();
-
-    report
+    COLLECTOR.read().unwrap().report()
 }

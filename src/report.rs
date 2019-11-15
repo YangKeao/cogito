@@ -48,7 +48,7 @@ mod flamegraph {
                     line
                 })
                 .collect();
-            if lines.len() > 0 {
+            if !lines.is_empty() {
                 flamegraph::from_lines(
                     &mut flamegraph::Options::default(),
                     lines.iter().map(|s| &**s),
