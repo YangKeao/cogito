@@ -4,21 +4,18 @@ mod collector;
 mod frame;
 mod report;
 
-
 use std::alloc::{GlobalAlloc, Layout};
-
-
 
 use frame::UnresolvedFrames;
 use report::Report;
 
-use std::sync::atomic::{AtomicBool, Ordering, AtomicPtr};
-use std::sync::RwLock;
 use crate::collector::Collector;
 use std::ptr::null_mut;
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::RwLock;
 
 fn get_backtrace() -> UnresolvedFrames {
-    let mut skip = 2;
+    let mut skip = 3;
 
     let mut bt = Vec::new();
 
@@ -37,10 +34,10 @@ fn get_backtrace() -> UnresolvedFrames {
 pub struct AllocRecorder<T: GlobalAlloc> {
     pub inner: T,
     pub record: AtomicBool,
-    pub collector: AtomicPtr<RwLock<Collector>>
+    pub collector: AtomicPtr<RwLock<Collector>>,
 }
 
-impl<T: GlobalAlloc> AllocRecorder<T>  {
+impl<T: GlobalAlloc> AllocRecorder<T> {
     pub const fn new(inner: T) -> AllocRecorder<T> {
         AllocRecorder {
             inner,
@@ -52,11 +49,14 @@ impl<T: GlobalAlloc> AllocRecorder<T>  {
     pub fn flush(&self) {
         let ptr = self.collector.load(Ordering::SeqCst);
         if !ptr.is_null() {
-            let _collector = unsafe {Box::from_raw(ptr)};
+            let _collector = unsafe { Box::from_raw(ptr) };
         }
 
         let collector = Box::new(RwLock::new(Collector::default()));
-        self.collector.store(Box::leak(collector) as *mut RwLock<Collector>, Ordering::SeqCst);
+        self.collector.store(
+            Box::leak(collector) as *mut RwLock<Collector>,
+            Ordering::SeqCst,
+        );
     }
 
     pub fn start_record(&self) {
@@ -71,7 +71,10 @@ impl<T: GlobalAlloc> AllocRecorder<T>  {
         self.stop_record();
 
         let report = unsafe {
-            (*self.collector.load(Ordering::SeqCst)).read().unwrap().report()
+            (*self.collector.load(Ordering::SeqCst))
+                .read()
+                .unwrap()
+                .report()
         };
 
         self.start_record();
@@ -88,11 +91,7 @@ unsafe impl<T: GlobalAlloc> GlobalAlloc for AllocRecorder<T> {
             let collector = &*self.collector.load(Ordering::SeqCst);
             match collector.write() {
                 Ok(mut guard) => {
-                    guard.alloc(
-                        std::mem::transmute(ptr),
-                        layout.size(),
-                        get_backtrace(),
-                    );
+                    guard.alloc(std::mem::transmute(ptr), layout.size(), get_backtrace());
                 }
                 Err(_) => {
                     unreachable!();

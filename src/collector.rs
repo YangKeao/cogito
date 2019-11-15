@@ -28,7 +28,11 @@ impl Collector {
             }
         }
 
-        if self.ptr_map.insert(addr, (backtrace.clone(), size)).is_some() {
+        if self
+            .ptr_map
+            .insert(addr, (backtrace.clone(), size))
+            .is_some()
+        {
             unreachable!();
         }
     }

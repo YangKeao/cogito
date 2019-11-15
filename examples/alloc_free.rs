@@ -1,6 +1,6 @@
-use std::fs::File;
-use std::alloc::System;
 use cogito::AllocRecorder;
+use std::alloc::System;
+use std::fs::File;
 
 #[global_allocator]
 static ALLOC: AllocRecorder<System> = AllocRecorder::new(System);

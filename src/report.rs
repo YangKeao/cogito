@@ -49,12 +49,11 @@ mod flamegraph {
                 })
                 .collect();
             if !lines.is_empty() {
-                flamegraph::from_lines(
-                    &mut flamegraph::Options::default(),
-                    lines.iter().map(|s| &**s),
-                    writer,
-                )
-                .unwrap(); // TODO: handle this error
+                let mut options = flamegraph::Options::default();
+                options.hash = true;
+                options.count_name = "bytes".to_owned();
+
+                flamegraph::from_lines(&mut options, lines.iter().map(|s| &**s), writer).unwrap(); // TODO: handle this error
             }
         }
     }
