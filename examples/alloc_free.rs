@@ -1,4 +1,9 @@
 use std::fs::File;
+use std::alloc::System;
+use cogito::AllocRecorder;
+
+#[global_allocator]
+static ALLOC: AllocRecorder<System> = AllocRecorder::new(System);
 
 fn quick_sort(input: Vec<u32>) -> Vec<u32> {
     if input.len() == 0 {
@@ -29,7 +34,8 @@ fn quick_sort(input: Vec<u32>) -> Vec<u32> {
 }
 
 fn main() {
-    cogito::start();
+    ALLOC.flush();
+    ALLOC.start_record();
 
     let mut vec = Vec::new();
 
@@ -39,9 +45,8 @@ fn main() {
 
     let _sorted = quick_sort(vec);
 
-    cogito::stop();
-
-    let report = cogito::report();
+    let report = ALLOC.report();
+    ALLOC.stop_record();
 
     let file = File::create("flamegraph.svg").unwrap();
     report.flamegraph(file);

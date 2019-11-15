@@ -33,7 +33,7 @@ impl Collector {
         }
     }
 
-    pub fn free(&mut self, addr: u64, backtrace: UnresolvedFrames) {
+    pub fn dealloc(&mut self, addr: u64, backtrace: UnresolvedFrames) {
         match self.ptr_map.get(&addr) {
             Some((bt, s)) => {
                 match self.backtrace_counter.get_mut(bt) {

@@ -1,3 +1,5 @@
+#![feature(const_fn)]
+
 mod collector;
 mod frame;
 mod report;
@@ -10,7 +12,10 @@ use collector::COLLECTOR;
 use frame::UnresolvedFrames;
 use report::Report;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering, AtomicPtr};
+use std::sync::RwLock;
+use crate::collector::Collector;
+use std::ptr::null_mut;
 
 fn get_backtrace() -> UnresolvedFrames {
     let mut skip = 2;
@@ -29,70 +34,94 @@ fn get_backtrace() -> UnresolvedFrames {
     UnresolvedFrames::new(bt)
 }
 
-struct MyAllocator {
+pub struct AllocRecorder<T: GlobalAlloc> {
+    pub inner: T,
     pub record: AtomicBool,
+    pub collector: AtomicPtr<RwLock<Collector>>
 }
 
-unsafe impl GlobalAlloc for MyAllocator {
+impl<T: GlobalAlloc> AllocRecorder<T>  {
+    pub const fn new(inner: T) -> AllocRecorder<T> {
+        AllocRecorder {
+            inner,
+            record: AtomicBool::new(false),
+            collector: AtomicPtr::new(null_mut()),
+        }
+    }
+
+    pub fn flush(&self) {
+        let ptr = self.collector.load(Ordering::SeqCst);
+        if !ptr.is_null() {
+            let collector = unsafe {Box::from_raw(ptr)};
+        }
+
+        let collector = Box::new(RwLock::new(Collector::default()));
+        self.collector.store(Box::leak(collector) as *mut RwLock<Collector>, Ordering::SeqCst);
+    }
+
+    pub fn start_record(&self) {
+        self.record.store(true, Ordering::SeqCst);
+    }
+
+    pub fn stop_record(&self) {
+        self.record.store(false, Ordering::SeqCst);
+    }
+
+    pub fn report(&self) -> Report {
+        self.stop_record();
+
+        let report = unsafe {
+            (*self.collector.load(Ordering::SeqCst)).read().unwrap().report()
+        };
+
+        self.start_record();
+        report
+    }
+}
+
+unsafe impl<T: GlobalAlloc> GlobalAlloc for AllocRecorder<T> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ptr = System.alloc(layout);
+        let ptr = self.inner.alloc(layout);
         if self.record.load(Ordering::SeqCst) {
-            match COLLECTOR.write() {
+            self.stop_record();
+
+            let collector = &*self.collector.load(Ordering::SeqCst);
+            match collector.write() {
                 Ok(mut guard) => {
-                    self.record.store(false, Ordering::SeqCst);
                     guard.alloc(
                         std::mem::transmute(ptr),
                         layout.size(),
                         get_backtrace(),
                     );
-                    self.record.store(true, Ordering::SeqCst);
                 }
                 Err(_) => {
                     unreachable!();
                 }
             }
+
+            self.start_record();
         }
 
         ptr
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        System.dealloc(ptr, layout);
+        self.inner.dealloc(ptr, layout);
 
         if self.record.load(Ordering::SeqCst) {
-            match COLLECTOR.write() {
+            self.stop_record();
+
+            let collector = &*self.collector.load(Ordering::SeqCst);
+            match collector.write() {
                 Ok(mut guard) => {
-                    self.record.store(false, Ordering::SeqCst);
-                    guard.free(std::mem::transmute(ptr), get_backtrace());
-                    self.record.store(true, Ordering::SeqCst);
+                    guard.dealloc(std::mem::transmute(ptr), get_backtrace());
                 }
                 Err(_) => {
                     unreachable!();
                 }
             }
+
+            self.start_record();
         }
     }
-}
-
-#[global_allocator]
-static A: MyAllocator = MyAllocator {
-    record: AtomicBool::new(false),
-};
-
-fn init() {
-    COLLECTOR.read().unwrap().init();
-}
-
-pub fn start() {
-    init();
-
-    A.record.store(true, Ordering::SeqCst)
-}
-
-pub fn stop() {
-    A.record.store(false, Ordering::SeqCst)
-}
-
-pub fn report() -> Report {
-    COLLECTOR.read().unwrap().report()
 }
