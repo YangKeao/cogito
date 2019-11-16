@@ -1,7 +1,13 @@
 use crate::frame::{Frames, UnresolvedFrames};
 use crate::report::Report;
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{RwLock, Arc};
+use crate::channel::{bounded, Sender, Receiver};
+
+use crossbeam::queue::ArrayQueue;
+use std::sync::atomic::Ordering;
+use backtrace::Frame;
+use crate::MAX_DEPTH;
 
 lazy_static::lazy_static! {
     pub(crate) static ref COLLECTOR: RwLock<Collector> = RwLock::new(Collector::default());
@@ -28,12 +34,16 @@ impl Collector {
             }
         }
 
-        if self
+        match self
             .ptr_map
-            .insert(addr, (backtrace.clone(), size))
-            .is_some()
-        {
-            unreachable!();
+            .insert(addr, (backtrace.clone(), size)) {
+            Some((frames, size)) => {
+                println!("{} {}", Frames::from(frames.clone()), size);
+                unreachable!()
+            }
+            None => {
+
+            }
         }
     }
 
@@ -48,11 +58,11 @@ impl Collector {
                 }
 
                 let complete_backtrace = UnresolvedFrames::new(
-                    bt.frames
+                    &bt.frames
                         .clone()
                         .into_iter()
                         .chain(backtrace.frames)
-                        .collect(),
+                        .collect::<Vec<Frame>>(),
                 );
 
                 self.backtrace_counter.insert(complete_backtrace, *s);
@@ -73,5 +83,69 @@ impl Collector {
                 .map(|(frames, size)| (Frames::from(frames.clone()), *size))
                 .collect(),
         }
+    }
+}
+
+enum Operation {
+    Alloc(u64, usize, ([Frame; MAX_DEPTH], usize)),
+    Dealloc(u64, ([Frame; MAX_DEPTH], usize)),
+    Report,
+}
+
+pub struct CollectorClient {
+    operation_sender: Sender<Operation>,
+    report_receiver: Receiver<Report>,
+}
+
+impl Default for CollectorClient {
+    fn default() -> Self {
+        let mut collector = Collector::default();
+        let (operation_sender, operation_receiver) = bounded(1);
+        let (report_sender, report_receiver) = bounded(1);
+
+        std::thread::Builder::new()
+            .name("collector".to_owned())
+            .spawn(move || {
+            use crate::profiler::PROFILE;
+
+            PROFILE.with(|profile| {
+                profile.store(false, Ordering::SeqCst);
+            });
+
+            loop {
+                match operation_receiver.recv() {
+                    Operation::Alloc(ptr, size, (frames, depth)) => {
+                        collector.alloc(ptr, size, UnresolvedFrames::new(&frames[0..depth]))
+                    }
+                    Operation::Dealloc(ptr, (frames, depth)) => {
+                        collector.dealloc(ptr, UnresolvedFrames::new(&frames[0..depth]))
+                    }
+                    Operation::Report => {
+                        report_sender.send(collector.report());
+                    }
+                }
+            }
+        });
+
+        CollectorClient {
+            operation_sender,
+            report_receiver,
+        }
+    }
+}
+
+impl CollectorClient {
+    pub fn alloc(&self, addr: u64, size: usize, backtrace: ([Frame; MAX_DEPTH], usize)) {
+        self.operation_sender.send(Operation::Alloc(addr, size, backtrace));
+    }
+
+    pub fn dealloc(&self, addr: u64, backtrace: ([Frame; MAX_DEPTH], usize)) {
+        self.operation_sender.send(Operation::Dealloc(addr, backtrace));
+    }
+
+    pub fn report(&self) -> Report {
+        self.operation_sender.send(Operation::Report);
+
+        self.report_receiver.recv()
     }
 }

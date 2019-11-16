@@ -37,14 +37,22 @@ fn quick_sort(input: Vec<u32>) -> Vec<u32> {
 fn main() {
     ALLOC.init_collector();
 
-    {
-        let mut vec = Vec::new();
+    let mut vec = Vec::new();
 
-        for _ in 0..100 {
-            vec.push(rand::random());
-        }
+    for _ in 0..100 {
+        vec.push(rand::random());
+    }
 
-        let _sorted = quick_sort(vec);
+    let mut thread_handlers = Vec::new();
+    for _ in 0..10 {
+        let vec = vec.clone();
+        thread_handlers.push(std::thread::spawn(move || {
+            let _sorted = quick_sort(vec);
+        }));
+    }
+
+    for thread in thread_handlers {
+        thread.join().unwrap();
     }
 
     let report = ALLOC.report();

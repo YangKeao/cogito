@@ -5,14 +5,16 @@ use std::hash::{Hash, Hasher};
 use std::os::raw::c_void;
 use std::path::PathBuf;
 
+use crate::MAX_DEPTH;
+
 #[derive(Clone)]
 pub struct UnresolvedFrames {
     pub frames: Vec<Frame>,
 }
 
 impl UnresolvedFrames {
-    pub fn new(bt: Vec<Frame>) -> Self {
-        Self { frames: bt }
+    pub fn new(bt: &[Frame]) -> Self {
+        Self { frames: bt.to_vec() }
     }
 }
 
@@ -121,6 +123,14 @@ impl Display for Symbol {
             None => {
                 write!(f, "Unknown")?;
             }
+        }
+        match &self.filename {
+            Some(filename) => write!(f, ":{:?}", filename)?,
+            None => {}
+        }
+        match &self.lineno {
+            Some(lineno) => write!(f,":{}", lineno)?,
+            None => {}
         }
         Ok(())
     }
