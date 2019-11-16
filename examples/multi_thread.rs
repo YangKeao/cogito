@@ -44,7 +44,7 @@ fn main() {
     }
 
     let mut thread_handlers = Vec::new();
-    for _ in 0..10 {
+    for _ in 0..100 {
         let vec = vec.clone();
         thread_handlers.push(std::thread::spawn(move || {
             let _sorted = quick_sort(vec);
@@ -58,9 +58,9 @@ fn main() {
     let report = ALLOC.report();
 
     let file = File::create("flamegraph.svg").unwrap();
-    report.flamegraph(file);
+    report.as_ref().flamegraph(file);
 
-    println!("report: {}", &report);
+    println!("report: {}", report.as_ref());
 
     cogito::PROFILE.with(|profile| {
         profile.store(false, Ordering::SeqCst);

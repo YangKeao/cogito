@@ -1,5 +1,5 @@
 use crate::frame::{Frames, UnresolvedFrames};
-use crate::report::Report;
+use crate::report::{Report, ReportReader};
 use std::collections::HashMap;
 use std::sync::{RwLock, Arc};
 use crate::channel::{bounded, Sender, Receiver};
@@ -89,6 +89,7 @@ impl Collector {
 enum Operation {
     Alloc(u64, usize, ([Frame; MAX_DEPTH], usize)),
     Dealloc(u64, ([Frame; MAX_DEPTH], usize)),
+    DropReport(Report),
     Report,
 }
 
@@ -123,6 +124,9 @@ impl Default for CollectorClient {
                     Operation::Report => {
                         report_sender.send(collector.report());
                     }
+                    Operation::DropReport(report) => {
+                        drop(report)
+                    }
                 }
             }
         });
@@ -143,9 +147,16 @@ impl CollectorClient {
         self.operation_sender.send(Operation::Dealloc(addr, backtrace));
     }
 
-    pub fn report(&self) -> Report {
+    pub fn drop_report(&self, report: Report) {
+        self.operation_sender.send(Operation::DropReport(report));
+    }
+
+    pub fn report(&self) -> ReportReader {
         self.operation_sender.send(Operation::Report);
 
-        self.report_receiver.recv()
+        let report = self.report_receiver.recv();
+        let report_reader = ReportReader::new(report, self);
+
+        report_reader
     }
 }

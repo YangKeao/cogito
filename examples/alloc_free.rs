@@ -40,19 +40,21 @@ fn main() {
     {
         let mut vec = Vec::new();
 
-        for _ in 0..100 {
+        for _ in 0..10000 {
             vec.push(rand::random());
         }
 
         let _sorted = quick_sort(vec);
     }
 
-    let report = ALLOC.report();
+    {
+        let report = ALLOC.report();
 
-    let file = File::create("flamegraph.svg").unwrap();
-    report.flamegraph(file);
+        let file = File::create("flamegraph.svg").unwrap();
+        report.as_ref().flamegraph(file);
 
-    println!("report: {}", &report);
+        println!("report: {}", report.as_ref());
+    }
 
     cogito::PROFILE.with(|profile| {
         profile.store(false, Ordering::SeqCst);

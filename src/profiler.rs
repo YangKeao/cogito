@@ -1,7 +1,7 @@
 use std::alloc::{GlobalAlloc, Layout};
 
 use crate::frame::UnresolvedFrames;
-use crate::report::Report;
+use crate::report::{Report, ReportReader};
 use crate::collector::{Collector, CollectorClient};
 
 use std::ptr::null_mut;
@@ -58,7 +58,7 @@ impl<T: GlobalAlloc> AllocRecorder<T> {
         self.collector.store(Box::leak(collector), Ordering::SeqCst);
     }
 
-    pub fn report(&self) -> Report {
+    pub fn report(&self) -> ReportReader {
         let report = unsafe {
             (*self.collector.load(Ordering::SeqCst))
                 .report()
