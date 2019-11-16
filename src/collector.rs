@@ -38,8 +38,7 @@ impl Collector {
             .ptr_map
             .insert(addr, (backtrace.clone(), size)) {
             Some((frames, size)) => {
-                println!("{} {}", Frames::from(frames.clone()), size);
-                unreachable!()
+                println!("WARN! DUPLICATE ALLOC: {} {}", Frames::from(frames.clone()), size);
             }
             None => {
 
@@ -53,7 +52,7 @@ impl Collector {
                 match self.backtrace_counter.get_mut(bt) {
                     Some(size) => *size -= s,
                     None => {
-                        unreachable!();
+                        println!("WARN UNRECORDED DEALLOC")
                     }
                 }
 
@@ -68,11 +67,14 @@ impl Collector {
                 self.backtrace_counter.insert(complete_backtrace, *s);
             }
             None => {
-                unreachable!();
+                println!("WARN UNRECORDED DEALLOC")
             }
         };
 
-        self.ptr_map.remove(&addr).unwrap();
+        match self.ptr_map.remove(&addr) {
+            Some(_) => {},
+            None => {println!("WARN UNRECORDED DEALLOC")}
+        }
     }
 
     pub fn report(&self) -> Report {
