@@ -16,7 +16,7 @@ thread_local! {
 }
 
 fn get_backtrace() -> ([Frame; MAX_DEPTH], usize) {
-    let mut skip = 3;
+    let mut skip = 0;
 
     let mut bt: [Frame; MAX_DEPTH] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
     let mut index = 0;
