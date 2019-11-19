@@ -5,6 +5,7 @@ use std::sync::{RwLock, Arc};
 use crate::channel::{bounded, Sender, Receiver};
 
 use crossbeam::queue::ArrayQueue;
+use crossbeam::sync::Parker;
 use std::sync::atomic::Ordering;
 use backtrace::Frame;
 use crate::MAX_DEPTH;
@@ -106,32 +107,38 @@ impl Default for CollectorClient {
         let (operation_sender, operation_receiver) = bounded(1);
         let (report_sender, report_receiver) = bounded(1);
 
+        let mut p = Parker::new();
+        let u = p.unparker().clone();
+
         std::thread::Builder::new()
             .name("collector".to_owned())
             .spawn(move || {
-            use crate::profiler::PROFILE;
+                use crate::profiler::PROFILE;
 
-            PROFILE.with(|profile| {
-                profile.store(false, Ordering::SeqCst);
-            });
+                PROFILE.with(|profile| {
+                    profile.store(false, Ordering::SeqCst);
+                });
 
-            loop {
-                match operation_receiver.recv() {
-                    Operation::Alloc(ptr, size, (frames, depth)) => {
-                        collector.alloc(ptr, size, UnresolvedFrames::new(&frames[0..depth]))
-                    }
-                    Operation::Dealloc(ptr, (frames, depth)) => {
-                        collector.dealloc(ptr, UnresolvedFrames::new(&frames[0..depth]))
-                    }
-                    Operation::Report => {
-                        report_sender.send(collector.report());
-                    }
-                    Operation::DropReport(report) => {
-                        drop(report)
+                u.unpark();
+                loop {
+                    match operation_receiver.recv() {
+                        Operation::Alloc(ptr, size, (frames, depth)) => {
+                            collector.alloc(ptr, size, UnresolvedFrames::new(&frames[0..depth]))
+                        }
+                        Operation::Dealloc(ptr, (frames, depth)) => {
+                            collector.dealloc(ptr, UnresolvedFrames::new(&frames[0..depth]))
+                        }
+                        Operation::Report => {
+                            report_sender.send(collector.report());
+                        }
+                        Operation::DropReport(report) => {
+                            drop(report)
+                        }
                     }
                 }
-            }
-        });
+        }).unwrap();
+
+        p.park();
 
         CollectorClient {
             operation_sender,
